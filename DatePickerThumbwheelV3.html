@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Mechanical Date Selector</title>
+    <style>
+        :root { --bg: #121212; --hl: #007aff; --warn: #ff9500; }
+        body { background: var(--bg); color: white; display: flex; flex-direction: column; height: 100vh; align-items: center; justify-content: center; font-family: system-ui, sans-serif; user-select: none; margin: 0; overflow: hidden; }
+        .output-label { margin-bottom: 30px; text-align: center; }
+        #dateOutput { color: var(--hl); font-weight: bold; font-size: 1.8rem; font-variant-numeric: tabular-nums; }
+        #dateOutput.clamped { color: var(--warn); }
+        .picker-container { display: flex; gap: 10px; background: #000; padding: 20px; border-radius: 15px; height: 160px; position: relative; border: 1px solid #333; }
+        .picker-container::after { content: ""; position: absolute; top: 50%; left: 0; width: 100%; height: 42px; transform: translateY(-50%); border-top: 1px solid var(--hl); border-bottom: 1px solid var(--hl); background: rgba(0, 122, 255, 0.1); pointer-events: none; z-index: 2; }
+        .wheel { width: 75px; height: 100%; overflow-y: scroll; scrollbar-width: none; cursor: grab; mask-image: linear-gradient(to bottom, transparent, black 40%, black 60%, transparent); -webkit-mask-image: linear-gradient(to bottom, transparent, black 40%, black 60%, transparent); outline: none; border-radius: 8px; border: 1px solid transparent; transition: background 0.2s; }
+        .wheel::-webkit-scrollbar { display: none; }
+        .wheel:active { cursor: grabbing; }
+        .wheel:focus { background: rgba(255, 255, 255, 0.08); border-color: rgba(0, 122, 255, 0.4); }
+        .wheel-list { list-style: none; padding: 60px 0; margin: 0; text-align: center; }
+        .wheel-item { height: 40px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; color: #444; transition: color 0.1s; pointer-events: none; }
+        .wheel-item.active { color: white; font-weight: bold; }
+        .wheel-item input { background: var(--hl); border: none; color: white; width: 85%; text-align: center; font-size: 1.2rem; border-radius: 4px; outline: none; font-family: inherit; font-weight: bold; pointer-events: auto; }
+    </style>
+</head>
+<body>
+
+<div class="output-label">
+    <div style="font-size: 0.8rem; color: #888; margin-bottom: 5px;">SELECTED DATE</div>
+    <div id="dateOutput">--</div>
+</div>
+
+<div class="picker-container">
+    <div class="wheel" id="dayWheel" tabindex="0" data-type="day"><ul class="wheel-list" id="dayList"></ul></div>
+    <div class="wheel" id="monthWheel" tabindex="0" data-type="month"><ul class="wheel-list" id="monthList"></ul></div>
+    <div class="wheel" id="yearWheel" tabindex="0" data-type="year" style="width: 95px;"><ul class="wheel-list" id="yearList"></ul></div>
+</div>
+
+<script>
+    const START_YEAR = 1900;
+    const END_YEAR = 2199;
+    const state = { trueDay: 3, month: 2, year: 2026 }; 
+
+    const wheels = {
+        day: document.getElementById('dayWheel'),
+        month: document.getElementById('monthWheel'),
+        year: document.getElementById('yearWheel')
+    };
+    const outputEl = document.getElementById('dateOutput');
+    let isEditing = false;
+    let cancelEdit = null; // Store function to abort typing mode
+    let dragTarget = null, startY = 0, startScroll = 0;
+
+    function getDaysInMonth(m, y) { return new Date(y, m, 0).getDate(); }
+
+    function init() {
+        for(let i=1; i<=31; i++) document.getElementById('dayList').innerHTML += `<li class="wheel-item" data-val="${i}">${i.toString().padStart(2,'0')}</li>`;
+        for(let i=1; i<=12; i++) document.getElementById('monthList').innerHTML += `<li class="wheel-item" data-val="${i}">${i.toString().padStart(2,'0')}</li>`;
+        for(let i=START_YEAR; i<=END_YEAR; i++) document.getElementById('yearList').innerHTML += `<li class="wheel-item" data-val="${i}">${i}</li>`;
+        refreshUI('auto');
+    }
+
+    function refreshUI(behavior = 'smooth') {
+        const max = getDaysInMonth(state.month, state.year);
+        const displayDay = Math.min(state.trueDay, max);
+
+        outputEl.textContent = `${state.year}-${state.month.toString().padStart(2,'0')}-${displayDay.toString().padStart(2,'0')}`;
+        outputEl.classList.toggle('clamped', state.trueDay > max);
+
+        wheels.year.scrollTo({ top: (state.year - START_YEAR) * 40, behavior });
+        wheels.month.scrollTo({ top: (state.month - 1) * 40, behavior });
+        wheels.day.scrollTo({ top: (displayDay - 1) * 40, behavior });
+
+        updateHighlights();
+    }
+
+    function updateHighlights() {
+        const max = getDaysInMonth(state.month, state.year);
+        const displayDay = Math.min(state.trueDay, max);
+        const targets = { year: state.year - START_YEAR, month: state.month - 1, day: displayDay - 1 };
+
+        Object.entries(wheels).forEach(([type, w]) => {
+            const idx = targets[type];
+            w.querySelectorAll('.wheel-item').forEach((item, i) => item.classList.toggle('active', i === idx));
+        });
+    }
+
+    function snap(w) {
+        const val = Math.round(w.scrollTop / 40);
+        const type = w.dataset.type;
+        if (type === 'year') state.year = Math.max(START_YEAR, Math.min(END_YEAR, val + START_YEAR));
+        if (type === 'month') state.month = Math.max(1, Math.min(12, val + 1));
+        if (type === 'day') state.trueDay = Math.max(1, Math.min(31, val + 1));
+        refreshUI('smooth');
+    }
+
+    Object.values(wheels).forEach(w => {
+        w.addEventListener('scroll', () => {
+            if (isEditing) return;
+            const idx = Math.round(w.scrollTop / 40);
+            w.querySelectorAll('.wheel-item').forEach((item, i) => item.classList.toggle('active', i === idx));
+        });
+
+        w.addEventListener('wheel', e => {
+            if (isEditing) cancelEdit(); // Abort typing if user scrolls
+            e.preventDefault();
+            w.scrollTop += (e.deltaY > 0 ? 40 : -40);
+            clearTimeout(w.t);
+            w.t = setTimeout(() => snap(w), 100);
+        }, { passive: false });
+
+        w.addEventListener('mousedown', e => {
+            if (isEditing) cancelEdit(); // Abort typing if user clicks/drags
+            dragTarget = w;
+            startY = e.pageY;
+            startScroll = w.scrollTop;
+            w.focus();
+        });
+
+        w.addEventListener('dblclick', () => {
+            if (isEditing) return;
+            isEditing = true;
+            const type = w.dataset.type;
+            const activeItem = w.querySelector('.wheel-item.active');
+            const originalHTML = activeItem.innerHTML; 
+            const currentVal = type === 'day' ? state.trueDay : (type === 'month' ? state.month : state.year);
+            
+            activeItem.innerHTML = `<input type="text" value="${currentVal}">`;
+            const input = activeItem.querySelector('input');
+            input.focus();
+            input.select();
+
+            cancelEdit = () => {
+                if (!isEditing) return;
+                isEditing = false;
+                activeItem.innerHTML = originalHTML;
+                refreshUI('auto');
+            };
+
+            const save = () => {
+                if (!isEditing) return;
+                const raw = input.value.trim();
+                let val = parseInt(raw);
+                isEditing = false;
+                activeItem.innerHTML = originalHTML;
+                if (!isNaN(val)) {
+                    if (type === 'year') {
+                        if (raw.length === 2) val = 2000 + val;
+                        else if (raw.length === 3) val = (val <= 199) ? 2000 + val : 1000 + val;
+                        state.year = Math.max(START_YEAR, Math.min(END_YEAR, val));
+                    } else if (type === 'month') state.month = Math.max(1, Math.min(12, val));
+                    else if (type === 'day') state.trueDay = Math.max(1, Math.min(31, val));
+                }
+                w.focus();
+                refreshUI('auto');
+            };
+            input.onblur = save;
+            input.onkeydown = k => { if (k.key === 'Enter') save(); if (k.key === 'Escape') cancelEdit(); };
+        });
+    });
+
+    window.addEventListener('mousemove', e => {
+        if (!dragTarget || isEditing) return;
+        dragTarget.scrollTop = startScroll - (e.pageY - startY);
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (dragTarget) { snap(dragTarget); dragTarget = null; }
+    });
+
+    window.addEventListener('keydown', e => {
+        if (isEditing) return;
+        const f = document.activeElement;
+        if (!f || !f.classList.contains('wheel')) return;
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            const type = f.dataset.type;
+            const delta = (e.key === 'ArrowUp' ? -1 : 1);
+            if (type === 'year') state.year = Math.max(START_YEAR, Math.min(END_YEAR, state.year + delta));
+            if (type === 'month') state.month = Math.max(1, Math.min(12, state.month + delta));
+            if (type === 'day') state.trueDay = Math.max(1, Math.min(31, state.trueDay + delta));
+            refreshUI('auto');
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            const list = Object.values(wheels);
+            const i = list.indexOf(f);
+            list[e.key === 'ArrowLeft' ? (i + 2) % 3 : (i + 1) % 3].focus();
+        }
+    });
+
+    init();
+</script>
+</body>
+</html>
