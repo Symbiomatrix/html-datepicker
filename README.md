@@ -11,5 +11,8 @@ Date picker that's convenient for mouse, finger or keyboard centric users.
 - Smart type year - entering two digits will select a viable year from the range which ends with said digits (99 -> 1999, 20 -> 2020),
   if there are multiple matches will default to current century; same thing with 3 digits, ambiguity goes to current millennium (999 -> 1999, if range is 1000-3000 then 999 -> 2999).
 - Arrow keys when in focus move between dmy and +-1 to value.
+### TODO
+- Typing could use some improvements: start edit on typing digit, auto go to next column on typing slash or tab.
+- Demo for whole form, in particular transitioning from one field to another should be smooth.
 
 <img width="384" height="380" alt="image" src="https://github.com/user-attachments/assets/f219bcb7-636a-42d4-970d-e0407b41a161" />
