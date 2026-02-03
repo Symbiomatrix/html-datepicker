@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Mechanical Date Selector</title>
+    <style>
+        :root { --bg: #121212; --hl: #007aff; }
+        body { background: var(--bg); color: white; display: flex; flex-direction: column; height: 100vh; align-items: center; justify-content: center; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; -webkit-user-select: none; margin: 0; }
+        
+        .output-label { margin-bottom: 20px; font-size: 1.2rem; color: #888; }
+        #dateOutput { color: var(--hl); font-weight: bold; font-size: 1.5rem; letter-spacing: 1px; }
+
+        .picker-container { display: flex; gap: 10px; background: #000; padding: 20px; border-radius: 15px; height: 160px; position: relative; border: 1px solid #333; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
+        .picker-container::after { content: ""; position: absolute; top: 50%; left: 0; width: 100%; height: 42px; transform: translateY(-50%); border-top: 1px solid var(--hl); border-bottom: 1px solid var(--hl); background: rgba(0, 122, 255, 0.1); pointer-events: none; }
+
+        .wheel { width: 70px; height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory; scrollbar-width: none; cursor: grab; mask-image: linear-gradient(to bottom, transparent, black 40%, black 60%, transparent); -webkit-mask-image: linear-gradient(to bottom, transparent, black 40%, black 60%, transparent); scroll-behavior: smooth; }
+        .wheel::-webkit-scrollbar { display: none; }
+        .wheel-list { list-style: none; padding: 60px 0; margin: 0; text-align: center; }
+        .wheel-item { height: 40px; display: flex; align-items: center; justify-content: center; scroll-snap-align: center; font-size: 1.3rem; color: #444; transition: color 0.2s; }
+        .wheel-item.active { color: white; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="output-label">The date you selected is: <span id="dateOutput">--</span></div>
+
+<div class="picker-container">
+    <div class="wheel" id="dayWheel"><ul class="wheel-list" id="dayList"></ul></div>
+    <div class="wheel" id="monthWheel"><ul class="wheel-list" id="monthList"></ul></div>
+    <div class="wheel" id="yearWheel" style="width: 90px;"><ul class="wheel-list" id="yearList"></ul></div>
+</div>
+
+<script>
+    const state = { 
+        trueDay: 1, // Intent (e.g., 31)
+        month: 1, 
+        year: 2026 
+    };
+
+    const wheels = {
+        day: document.getElementById('dayWheel'),
+        month: document.getElementById('monthWheel'),
+        year: document.getElementById('yearWheel')
+    };
+    const outputEl = document.getElementById('dateOutput');
+
+    function getDaysInMonth(m, y) { return new Date(y, m, 0).getDate(); }
+
+    function init() {
+        const lists = { 
+            day: document.getElementById('dayList'), 
+            month: document.getElementById('monthList'), 
+            year: document.getElementById('yearList') 
+        };
+        for(let i=1; i<=31; i++) lists.day.innerHTML += `<li class="wheel-item">${i.toString().padStart(2,'0')}</li>`;
+        for(let i=1; i<=12; i++) lists.month.innerHTML += `<li class="wheel-item">${i.toString().padStart(2,'0')}</li>`;
+        for(let i=1990; i<=2040; i++) lists.year.innerHTML += `<li class="wheel-item">${i}</li>`;
+        
+        // Initial Scroll positions
+        wheels.year.scrollTop = (state.year - 1990) * 40;
+        updateUI();
+    }
+
+    function updateUI() {
+        const max = getDaysInMonth(state.month, state.year);
+        const visualDay = Math.min(state.trueDay, max);
+        
+        wheels.day.scrollTop = (visualDay - 1) * 40;
+        
+        // Update Output String
+        const dateStr = `${state.year}-${state.month.toString().padStart(2,'0')}-${visualDay.toString().padStart(2,'0')}`;
+        outputEl.textContent = dateStr;
+
+        highlight();
+    }
+
+    let activeWheel = null, startY, startScroll;
+
+    [wheels.day, wheels.month, wheels.year].forEach(el => {
+        el.addEventListener('mousedown', e => {
+            activeWheel = el;
+            startY = e.pageY;
+            startScroll = el.scrollTop;
+            el.style.scrollBehavior = 'auto';
+        });
+    });
+
+    window.addEventListener('mousemove', e => {
+        if (!activeWheel) return;
+        const walk = (e.pageY - startY) * 1.5; 
+        activeWheel.scrollTop = startScroll - walk;
+        
+        // Calculate transient state for live preview
+        state.month = Math.round(wheels.month.scrollTop / 40) + 1;
+        state.year = Math.round(wheels.year.scrollTop / 40) + 1990;
+        
+        if (activeWheel !== wheels.day) {
+            updateUI(); 
+        } else {
+            // If dragging day, just update intent and output
+            state.trueDay = Math.round(wheels.day.scrollTop / 40) + 1;
+            updateUI();
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (!activeWheel) return;
+        activeWheel.style.scrollBehavior = 'smooth';
+        activeWheel = null;
+        
+        setTimeout(() => {
+            state.month = Math.round(wheels.month.scrollTop / 40) + 1;
+            state.year = Math.round(wheels.year.scrollTop / 40) + 1990;
+            state.trueDay = Math.round(wheels.day.scrollTop / 40) + 1;
+            updateUI();
+        }, 50);
+    });
+
+    function highlight() {
+        document.querySelectorAll('.wheel-item').forEach(el => el.classList.remove('active'));
+        [wheels.day, wheels.month, wheels.year].forEach(w => {
+            const idx = Math.round(w.scrollTop / 40);
+            const list = w.querySelector('.wheel-list');
+            if(list.children[idx]) list.children[idx].classList.add('active');
+        });
+    }
+
+    init();
+</script>
+</body>
+</html>
