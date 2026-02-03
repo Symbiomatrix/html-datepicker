@@ -1,5 +1,5 @@
 # html-datepicker
-Date picker that's convenient for mouse, finger and keyboard users.
+Date picker that's convenient for mouse, finger or keyboard centric users.
 
 ## Features
 ### V2
